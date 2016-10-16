@@ -73,7 +73,7 @@ public class GameController : MonoBehaviour {
 
     public void UpdateCommonDeck(CardVo card)
     {
-        
+        _gameScreen.UpdateCommonDeck(card);
     }
 
     public void DealCardToPlayer(int spreadCardId, int playerCardId, GameModel.Turn turn)
@@ -84,7 +84,7 @@ public class GameController : MonoBehaviour {
 
     public void MoveCardFromPlayerToCommonDeck(int playerCardId, int commonDeckCardId, GameModel.Turn turn)
     {
-        
+        _gameScreen.MoveCardFromPlayerToCommonDeck(playerCardId, commonDeckCardId, turn);
     }
 
 
@@ -96,6 +96,27 @@ public class GameController : MonoBehaviour {
     public void ChangeTurn(GameModel.Turn turn)
     {
         
+    }
+
+    public void OnPlayerDeckCardTap(CardVo cardVo)
+    {
+
+        var possibleMoves = _model.FindPossibleMoves(cardVo);
+        _gameScreen.RemoveHighLightFromCards();
+        if (possibleMoves.Count > 0)
+        {
+            _gameScreen.HighLightPlayerCard(cardVo);
+            _gameScreen.HighLightCommonDeck(possibleMoves);
+        }
+    }
+
+    public void OnCommonDeckCardTap(CardVo cardVo)
+    {
+        bool sucess = _model.TryToMoveCard(cardVo);
+        if (sucess)
+        {
+            _gameScreen.RemoveHighLightFromCards();
+        }
     }
 
 

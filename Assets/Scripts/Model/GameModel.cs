@@ -21,12 +21,13 @@ public class GameModel {
 
     public event Action<Turn> ChangeTurn;
 
-
-
     private List<CardVo> _playerDeck;
     private List<CardVo> _opponentDeck;
     private List<CardVo> _spreadDeck;
     private List<CardVo> _commonDeck;
+
+    private List<CardVo> _possibleMoves;
+    private CardVo _cardToMove;
 
     private bool _isGameStarted = false;
     private Turn _currentTurn;
@@ -46,6 +47,7 @@ public class GameModel {
         _isGameStarted = true;
         _opponentDeck = new List<CardVo>();
         _playerDeck = new List<CardVo>();
+        _possibleMoves = new List<CardVo>();
 
         CreateSpread();
         CreateCommonDeck();
@@ -54,6 +56,7 @@ public class GameModel {
 
         PerformMatchingAndDealingSequence(Turn.PLAYER);
 
+        _currentTurn = Turn.OPPONENT;
         SwitchTurn();
     }
 
@@ -178,21 +181,67 @@ public class GameModel {
         Debug.Log("add card to common deck");
 
         var card = CreateCard();
-        _spreadDeck.Insert(0, card);
+        _commonDeck.Insert(0, card);
 
         UpdateCommonDeck.Invoke(card.Clone());
     }
 
     private void PerformMatchingAndDealingSequence(Turn targetTurn)
     {
-        List<CardVo> cardsToDelete = CheckForPlayerMatchingCards(targetTurn);
-
+        var cardsToDelete = CheckForPlayerMatchingCards(targetTurn);
         var safeCounter = 100;
-        while(cardsToDelete.Count > 0 && safeCounter > 0)
+
+        if (cardsToDelete.Count == 0)
+        {
+            cardsToDelete = DeletePlayerCardsIfNoPossibleMoves(targetTurn);
+            if (cardsToDelete.Count > 0)
+            {
+                Debug.LogWarning("-------------NO POSSIBLE MOVES!!!");
+            }
+        }
+
+        while (cardsToDelete.Count > 0 && safeCounter > 0)
         {
             safeCounter--;
-          UpdatePlayerCards(targetTurn, cardsToDelete);
+            UpdatePlayerCards(targetTurn, cardsToDelete);
             cardsToDelete = CheckForPlayerMatchingCards(targetTurn);
+
+            if(cardsToDelete.Count == 0)
+            {
+                cardsToDelete = DeletePlayerCardsIfNoPossibleMoves(targetTurn);
+                if(cardsToDelete.Count > 0)
+                {
+                    Debug.LogWarning("-------------NO POSSIBLE MOVES!!!");
+                }
+            }
+        }
+
+       
+    }
+
+    private List<CardVo> DeletePlayerCardsIfNoPossibleMoves(Turn targetTurn)
+    {
+        List<CardVo> currentPlayerDeck = targetTurn == Turn.PLAYER ? _playerDeck : _opponentDeck;
+        var possibleMovesCound = 0;
+
+        foreach (CardVo playerCard in currentPlayerDeck)
+        {
+            var possibleMoves = FindPossibleMoves(playerCard);
+            possibleMovesCound += possibleMoves.Count;
+        }
+
+        if (possibleMovesCound == 0)
+        {
+            Dictionary<GameConfig.MatchType, List<CardVo>> matchedCardsByMatchType =
+           new Dictionary<GameConfig.MatchType, List<CardVo>>();
+
+            matchedCardsByMatchType.Add(GameConfig.MatchType.BY_RANK, CloneList(currentPlayerDeck));
+            MatchedPlayerCards.Invoke(matchedCardsByMatchType, targetTurn);
+
+            return currentPlayerDeck;
+        } else
+        {
+            return new List<CardVo>(); ;
         }
     }
 
@@ -347,7 +396,77 @@ public class GameModel {
         return CardVo.RandomCard(true, lastCardId++);
     }
 
+    private CardVo FindCardById(List<CardVo> list, int cardId)
+    {
+        if(list == null)
+        {
+            return null;
+        }
 
+        foreach (CardVo result in list)
+        {
+            if(result.id == cardId)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    public List<CardVo> FindPossibleMoves(CardVo cardVo)
+    {
+        List<CardVo> result = new List<CardVo>();
+        if (_currentTurn == Turn.PLAYER)
+        {
+            foreach(CardVo commonDeckCard in _commonDeck)
+            {
+                if(Mathf.Abs((int)commonDeckCard.rank - (int)cardVo.rank) == 1)
+                {
+                    result.Add(commonDeckCard);
+                }
+            }
+        }
+
+        if (result.Count > 0)
+        {
+            _cardToMove = cardVo.Clone();
+        } else
+        {
+            _cardToMove = null;
+        }
+
+        _possibleMoves = result;
+
+        return CloneList(result);
+    }
+
+    public bool TryToMoveCard(CardVo cardVo)
+    {
+        CardVo cardToRemoveFromCOmmondeck = FindCardById(_possibleMoves, cardVo.id);
+        List<CardVo> cardsToRemoveFromplayerDeck;
+        List<CardVo> currentPlayerDeck = _currentTurn == Turn.PLAYER ? _playerDeck : _opponentDeck;
+
+
+        if (cardToRemoveFromCOmmondeck != null && _cardToMove != null)
+        {
+            cardsToRemoveFromplayerDeck = new List<CardVo>();
+            _cardToMove = FindCardById(_playerDeck, _cardToMove.id);
+            cardsToRemoveFromplayerDeck.Add(_cardToMove);
+
+            MoveCardFromPlayerToCommonDeck.Invoke(_cardToMove.id, cardToRemoveFromCOmmondeck.id, _currentTurn);
+            _commonDeck.Remove(cardToRemoveFromCOmmondeck);
+            AddCardToCommonDeck();
+
+            UpdatePlayerCards(_currentTurn, cardsToRemoveFromplayerDeck);
+
+            PerformMatchingAndDealingSequence(_currentTurn);
+
+            return true;
+        }
+
+        return false;
+    }
 
 
 }

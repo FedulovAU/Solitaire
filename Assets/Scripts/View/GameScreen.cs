@@ -6,22 +6,24 @@ using DG.Tweening;
 
 public class GameScreen : MonoBehaviour {
     //normal
-    /*
+    
     private const float PRE_DEAL_DELAY = 1f;
     private const float FLIP_DURATION = 0.2f;
     private const float MOVE_DURATION = 0.05f;
     private const float PRE_MOVE_DELAY = 0.01f;
     private const float DEAL_DURATION = 0.2f;
     private const float SHIFT_DECK_DURATION = 0.1f;
-    */
+    
 
     //fast
+    /*
     private const float PRE_DEAL_DELAY = 0.1f;
     private const float FLIP_DURATION = 0.01f;
     private const float MOVE_DURATION = 0.01f;
     private const float PRE_MOVE_DELAY = 0.01f;
     private const float DEAL_DURATION = 0.01f;
     private const float SHIFT_DECK_DURATION = 0.01f;
+    */
 
     [SerializeField]
     private RectTransform _cardGenerator;
@@ -47,6 +49,9 @@ public class GameScreen : MonoBehaviour {
     private List<Card> _spreadCards;
     private List<Card> _commonDeckCards;
 
+    private Card _playerHighLightedCard;
+    private List<Card> _commonDeckHighLightedCards;
+
     private List<CardHolder> _playerCardHolders;
     private List<CardHolder> _opponentCardHolders;
     private List<CardHolder> _spreadCardHolders;
@@ -60,6 +65,14 @@ public class GameScreen : MonoBehaviour {
     private GameObject _cardHolderPrefab;
 
     private RectTransform _canvasRectTransform;
+
+    public bool IsAnimating
+    {
+        get
+        {
+            return (_commandsSequence != null && _commandsSequence.Count > 0) || _currentCommand != null;
+        }
+    }
 
     private bool _isStarted;
     public bool IsStarted
@@ -75,6 +88,8 @@ public class GameScreen : MonoBehaviour {
 
     void Awake()
     {
+        _commonDeckHighLightedCards = new List<Card>();
+
         _cardPrefab = Resources.Load("Prefabs\\Card", typeof(GameObject)) as GameObject;
         _cardHolderPrefab = Resources.Load("Prefabs\\CardHolder", typeof(GameObject)) as GameObject;
         _canvasRectTransform = GetComponent<RectTransform>();
@@ -100,6 +115,9 @@ public class GameScreen : MonoBehaviour {
         {
             _currentCommand = _commandsSequence.Dequeue();
             _currentCommand();
+        } else
+        {
+            _currentCommand = null;
         }
     }
 
@@ -196,6 +214,44 @@ public class GameScreen : MonoBehaviour {
         }
     }
 
+    public void HighLightPlayerCard(CardVo cardVo)
+    {
+        _playerHighLightedCard = FindCardById(_playerCards, cardVo.id);
+        if(_playerHighLightedCard != null)
+        {
+            _playerHighLightedCard.EnablePurpleGlow(true);
+        }
+    }
+
+    public void HighLightCommonDeck(List<CardVo> cards)
+    {
+        foreach(CardVo cardVo in cards)
+        {
+            var card = FindCardById(_commonDeckCards, cardVo.id);
+            if(card != null)
+            {
+                _commonDeckHighLightedCards.Add(card);
+                card.EnableGreenGlow(true);
+            }
+        }
+    }
+
+    public void RemoveHighLightFromCards()
+    {
+        if (_playerHighLightedCard != null)
+        {
+            _playerHighLightedCard.EnablePurpleGlow(false);
+        }
+
+        foreach (Card card in _commonDeckHighLightedCards)
+        {
+            if (card != null)
+            {
+                card.EnableGreenGlow(false);
+            }
+        }
+    }
+
     public void FillSpreadDeck(List<CardVo> cards)
     {
         CreateCardHolders();
@@ -216,14 +272,7 @@ public class GameScreen : MonoBehaviour {
 
             for (int i = 0; i < cards.Count; i++)
             {
-                var cardInstance = GameObject.Instantiate(_cardPrefab);
-                Card card = cardInstance.GetComponent<Card>();
-
-                card.RectTransform.SetParent( _canvasRectTransform);
-                card.RectTransform.position = _cardGenerator.position;
-                card.RectTransform.localScale = new Vector3(-1, 1, 1);
-                card.setCard(cards[i]);
-                
+                Card card = CreateCard(cards[i]);
                 _spreadCards.Add(card);
             }
 
@@ -271,13 +320,7 @@ public class GameScreen : MonoBehaviour {
 
             for (int i = 0; i < cards.Count; i++)
             {
-                var cardInstance = GameObject.Instantiate(_cardPrefab);
-                Card card = cardInstance.GetComponent<Card>();
-
-                card.RectTransform.SetParent(_canvasRectTransform);
-                card.RectTransform.position = _cardGenerator.position;
-                card.RectTransform.localScale = new Vector3(-1, 1, 1);
-                card.setCard(cards[i]);
+                Card card = CreateCard(cards[i]);
 
                 _commonDeckCards.Add(card);
             }
@@ -359,13 +402,8 @@ public class GameScreen : MonoBehaviour {
 
     private void OnUpdateDeckShiftCardsComplete(CardVo cardVo)
     {
-        var cardInstance = GameObject.Instantiate(_cardPrefab);
-        Card card = cardInstance.GetComponent<Card>();
+        Card card = CreateCard(cardVo);
 
-        card.RectTransform.SetParent(_canvasRectTransform);
-        card.RectTransform.position = _cardGenerator.position;
-        card.RectTransform.localScale = new Vector3(-1, 1, 1);
-        card.setCard(cardVo);
         _spreadCards.Insert(0, card);
         var holderToMove = GetEmptyHolder(_spreadCardHolders);
 
@@ -394,13 +432,8 @@ public class GameScreen : MonoBehaviour {
 
     private void OnUpdateCommonDeckShiftCardsComplete(CardVo cardVo)
     {
-        var cardInstance = GameObject.Instantiate(_cardPrefab);
-        Card card = cardInstance.GetComponent<Card>();
+        Card card = CreateCard(cardVo);
 
-        card.RectTransform.SetParent(_canvasRectTransform);
-        card.RectTransform.position = _cardGenerator.position;
-        card.RectTransform.localScale = new Vector3(-1, 1, 1);
-        card.setCard(cardVo);
         _commonDeckCards.Insert(0, card);
         var holderToMove = GetEmptyHolder(_commonDeckCardHolders);
 
@@ -418,7 +451,7 @@ public class GameScreen : MonoBehaviour {
 
         var flipNoShirt = card.RectTransform.DOScaleX(1, FLIP_DURATION / 2);
         var moveCard = card.RectTransform.
-        DOMove(holderToMove.RectTransform.position, MOVE_DURATION).
+        DOMove(holderToMove.RectTransform.position, DEAL_DURATION).
         SetDelay(PRE_MOVE_DELAY);
 
         inserDeckSequence.Append(flipShirt);
@@ -439,7 +472,7 @@ public class GameScreen : MonoBehaviour {
                 if (holderToMove != null)
                 {
                     Card cardToMove = _commonDeckCards[i];
-                    var movingTween = cardToMove.RectTransform.DOMove(holderToMove.RectTransform.position, 0.1f);
+                    var movingTween = cardToMove.RectTransform.DOMove(holderToMove.RectTransform.position, 0.5f);
                     movingTween.SetDelay(delay);
                     delay += 0.05f;
 
@@ -530,21 +563,57 @@ public class GameScreen : MonoBehaviour {
     }
 
 
-    public void MoveCardFromPlayerToCommonDeck(int playerCardId, int commonDeckCardId)
+    public void MoveCardFromPlayerToCommonDeck(int playerCardId, int commonDeckCardId, GameModel.Turn turn)
     {
         _commandsSequence.Enqueue(() =>
         {
+            List<Card> currentPlayerDeck = turn == GameModel.Turn.PLAYER ? _playerCards : _opponentCards;
+            Card cardToMove = FindCardById(currentPlayerDeck, playerCardId);
+
+            if(cardToMove == null)
+            {
+                Debug.LogError("can't move card from current player: " + turn + "  card id: " + playerCardId
+                    + "  no such card in player deck");
+            } else
+            {
+                CardHolder holderDestination = FindCardHolderByCardId(_commonDeckCardHolders, commonDeckCardId);
+                if(holderDestination == null)
+                {
+                    Debug.LogError("can't move card to common deck - no such card with id:  " + commonDeckCardId);
+                } else
+                {
+                    holderDestination.DetachCard();
+
+                    Sequence sequence = DOTween.Sequence();
+                    Card cardToRemoveFromCommonDeck = FindCardById(_commonDeckCards, commonDeckCardId);
+
+                    sequence.Append(cardToMove.RectTransform.DOMove(holderDestination.RectTransform.position, 1));
+
+                    sequence.Append(cardToMove.RectTransform.DOScale(Vector3.zero, 0.1f));
+                    sequence.Join(cardToRemoveFromCommonDeck.RectTransform.DOScale(Vector3.zero, 0.1f));
+
+                    sequence.OnComplete(()=> 
+                    {
+                        _commonDeckCards.Remove(cardToRemoveFromCommonDeck);
+                        DestroyCard(cardToRemoveFromCommonDeck);
+                        DestroyCard(cardToMove);
+                        NextCommand();
+                    });
+
+
+                }
+            }
 
         });
-    }
 
-    public void MoveCardFromOpponentToCommonDeck(int playerCardId, int commonDeckCardId)
-    {
-        _commandsSequence.Enqueue(() =>
+       if(_currentCommand == null && _commandsSequence.Count > 0)
         {
-
-        });
+            NextCommand();
+        }
+        
     }
+
+ 
 
     public void MatchedPlayerCards(Dictionary<GameConfig.MatchType, List<CardVo>> cardsByMatchingType, GameModel.Turn turn)
     {
@@ -590,9 +659,10 @@ public class GameScreen : MonoBehaviour {
             Sequence scaleToZeroSequence = DOTween.Sequence();
             foreach (Card card in cardsToRemove)
             {
+                currenPlayerCards.Remove(card);
                 scaleToZeroSequence.Join(card.RectTransform.DOScale(new Vector3(0f, 0f, 1), 0.2f).OnComplete(()=>
                 {
-                    GameObject.Destroy(card);
+                    DestroyCard(card);
                 }));   
             }
 
@@ -604,6 +674,7 @@ public class GameScreen : MonoBehaviour {
 
         });
     }
+    
 
 
     public void ChangeTurn(GameModel.Turn turn)
@@ -614,6 +685,43 @@ public class GameScreen : MonoBehaviour {
         });
     }
 
+    private Card CreateCard(CardVo cardVo)
+    {
+        var cardInstance = GameObject.Instantiate(_cardPrefab);
+        Card card = cardInstance.GetComponent<Card>();
+
+        card.RectTransform.SetParent(_canvasRectTransform);
+        card.RectTransform.position = _cardGenerator.position;
+        card.RectTransform.localScale = new Vector3(-1, 1, 1);
+        card.setCard(cardVo);
+        card.OnCardClick += OnCardTap;
+
+        return card;
+    }
+
+    private void DestroyCard(Card card)
+    {
+        card.OnCardClick -= OnCardTap;
+        GameObject.Destroy(card);
+    }
+
+    private void OnCardTap(CardVo cardVo)
+    {
+        if (IsAnimating)
+        {
+            return;
+        }
+
+        if(FindCardById(_playerCards, cardVo.id) != null)
+        {
+            _controller.OnPlayerDeckCardTap(cardVo);
+        }
+        else if (FindCardById(_commonDeckCards, cardVo.id) != null)
+        {
+            _controller.OnCommonDeckCardTap(cardVo);
+        }
+        
+    }
 
     private CardHolder GetEmptyHolder(List<CardHolder> holders, bool isNearest = false)
     {

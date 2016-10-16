@@ -3,10 +3,12 @@ using System.Collections;
 using System;
 using DigitalRuby.Tween;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
-
+[RequireComponent(typeof(EventTrigger))]
 public class Card : MonoBehaviour
 {
+    public event Action<CardVo> OnCardClick;
 
     private CardVo _cardVo;
     public int CardId
@@ -35,11 +37,37 @@ public class Card : MonoBehaviour
     [SerializeField]
     private int _cardId;
 
+    [SerializeField]
+    private Image _purpleGlow;
+
+    [SerializeField]
+    private Image _greenGlow;
+
+    private EventTrigger _eventTrigger;
+
 
     void Awake()
     {
+        _purpleGlow.enabled = false;
+        _greenGlow.enabled = false;
+
         shirtImage = cardShirt.GetComponent<Image>();
         _rectTransform = GetComponent<RectTransform> ();
+
+        _eventTrigger = GetComponent<EventTrigger>();
+        EventTrigger.Entry entry = new EventTrigger.Entry();
+        entry.eventID = EventTriggerType.PointerClick;
+        entry.callback.AddListener( (data) =>
+        {
+            Debug.Log("tap on card id: " + _cardVo.id);
+            if(OnCardClick!= null)
+            {
+                OnCardClick.Invoke(_cardVo);
+            }
+        });
+
+        _eventTrigger.triggers.Add(entry);
+
     }
 
     // Use this for initialization
@@ -51,6 +79,16 @@ public class Card : MonoBehaviour
     void Update()
     {
 
+    }
+
+    public void EnableGreenGlow(bool isEnabled)
+    {
+        _greenGlow.enabled = isEnabled;
+    }
+
+    public void EnablePurpleGlow(bool isEnabled)
+    {
+        _purpleGlow.enabled = isEnabled;
     }
 
     public RectTransform RectTransform
